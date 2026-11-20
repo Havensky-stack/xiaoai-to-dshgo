@@ -49,32 +49,72 @@ public class ProbeActivity extends Activity {
     };
 
     private static final String[] PAYLOADS = {
-        "{\"id\":\"1\",\"method\":\"help\"}",
-        "{\"id\":\"1\",\"method\":\"list\"}",
-        "{\"id\":\"1\",\"method\":\"shell\",\"params\":{\"command\":\"id\"}}",
-        "{\"id\":\"1\",\"method\":\"exec\"}",
-        "{\"id\":\"1\",\"method\":\"execute\",\"params\":{\"command\":\"id\"}}",
-        "{\"id\":\"1\",\"method\":\"tools/list\"}",
-        "{\"id\":\"1\",\"method\":\"run\",\"params\":{\"cmd\":\"id\"}}"
+        "{\"id\":\"1\",\"method\":\"asr.start\"}",
+        "{\"id\":\"1\",\"method\":\"asr.startRecognize\"}",
+        "{\"id\":\"1\",\"method\":\"asr.stop\"}",
+        "{\"id\":\"1\",\"method\":\"asr.cancel\"}",
+        "{\"id\":\"1\",\"method\":\"tts.open\"}",
+        "{\"id\":\"1\",\"method\":\"agent.submit\"}",
+        "{\"id\":\"1\",\"method\":\"agent.consent\"}",
+        "{\"id\":\"1\",\"method\":\"auth.status\"}",
+        "{\"id\":\"1\",\"method\":\"auth.login\"}",
+        "{\"id\":\"1\",\"method\":\"session.open\"}",
+        "{\"id\":\"1\",\"method\":\"framework.ping\"}",
+        "{\"id\":\"1\",\"method\":\"ping\"}",
+        "{\"id\":\"1\",\"method\":\"device.info\"}",
+        "{\"id\":\"1\",\"method\":\"app.list\"}",
+        "{\"id\":\"1\",\"method\":\"tool.list\"}",
+        "{\"id\":\"1\",\"method\":\"shell.exec\"}",
+        "{\"id\":\"1\",\"method\":\"cmd.exec\"}",
+        "{\"id\":\"1\",\"method\":\"system.info\"}",
+        "{\"id\":\"1\",\"method\":\"cli.ping\"}",
+        "{\"id\":\"1\",\"method\":\"version\"}"
     };
 
     private void probe(IBinder binder) {
-        for (String payload : PAYLOADS) {
-            try {
-                String r = call(binder, 1, payload);
-                log("payload " + payload + " -> " + trim(r));
-            } catch (Throwable t) {
-                log("payload " + payload + " !! " + t.getMessage());
-            }
+        try {
+            String open = call(binder, 1, "{\"id\":\"1\",\"method\":\"session.open\"}");
+            log("session.open => " + open);
+            String sid = null;
+            try { sid = new org.json.JSONObject(open).optString("sessionId", null); } catch (Throwable ignored) {}
+            if (sid == null || sid.isEmpty()) { log("no sessionId"); return; }
+            String a = "{\"id\":\"2\",\"method\":\"agent.submit\",\"session_id\":\"" + sid + "\",\"text\":\"用一句话介绍你自己\"}";
+            log("A root-fields => " + call(binder, 1, a));
+            String b2 = "{\"id\":\"3\",\"method\":\"agent.submit\",\"params\":{\"sessionId\":\"" + sid + "\",\"text\":\"用一句话介绍你自己\"}}";
+            log("B camelCase => " + call(binder, 1, b2));
+            Cb cb = new Cb();
+            log("S1 stream open => " + stream(binder, "{\"id\":\"s1\",\"method\":\"session.open\"}", cb));
+            Thread.sleep(800);
+            log("S2 stream submit => " + stream(binder, b2, cb));
+            Thread.sleep(1500);
+        } catch (Throwable t) {
+            log("probe !! " + t.getClass().getSimpleName() + ": " + t.getMessage());
         }
-        for (int code = 1; code <= 8; code++) {
+    }
+
+    class Cb extends android.os.Binder {
+        @Override
+        protected boolean onTransact(int code, Parcel data, Parcel reply, int flags) {
             try {
-                String r = call(binder, code, "id");
-                log("code " + code + " -> " + trim(r));
-            } catch (Throwable t) {
-                log("code " + code + " !! " + t.getClass().getSimpleName() + ": " + t.getMessage());
-            }
+                data.enforceInterface("com.aios.apptoolsdk.aidl.ICliCommandCallback");
+                String v = data.readString();
+                log("CB#" + code + " => " + (v == null ? "null" : (v.length() > 160 ? v.substring(0,160) : v)));
+                if (reply != null) reply.writeNoException();
+            } catch (Throwable t) { log("CB#" + code + " err " + t); }
+            return true;
         }
+    }
+
+    private String stream(IBinder b, String json, Cb cb) throws Exception {
+        Parcel d = Parcel.obtain(); Parcel r = Parcel.obtain();
+        try {
+            d.writeInterfaceToken(DESC);
+            d.writeString(json);
+            d.writeStrongBinder(cb);
+            b.transact(2, d, r, 0);
+            r.readException();
+            return r.readString();
+        } finally { d.recycle(); r.recycle(); }
     }
 
     private String call(IBinder b, int code, String cmd) throws Exception {

@@ -116,3 +116,34 @@ I/DSHVOICE: PROBE connected: ComponentInfo{com.miui.voiceassist/com.aios.osbot.e
 ```
 
 下一步：从 `CliDispatcher` 的 when 分支里取出 method 字符串全集。
+
+## 8. 实测：连接亲和性（2026-11-20）
+
+`executeCommand`（一次性调用）和 `executeStreaming`（事务码 2）**每次都新建一个连接**，
+返回的连接 id 每次不同。`session.open` 拿到的 `sessionId` 只属于创建它的那次连接：
+
+```
+S1 stream open   => 3adba0a8-a4b
+CB#1             => {"type":"ok","id":"3adba0a8-a4b","sessionId":"2510c64f-…"}
+S2 stream submit => 15a8afd8-eee          ← 新连接
+CB#1             => {"code":"PERMISSION_DENIED","message":"session 不属于当前连接"}
+```
+
+复用同一个回调 binder 也不行（连接不是按回调 binder 键的）。
+
+### 剩下的唯一方向
+
+`openUploadStream(streamId?) / sendUploadChunk(streamId, json) / endUploadStream` ——
+这三个方法存在的意义就是**在同一条连接里追加请求**。下一轮验证：
+开一条上传流 → 用 chunk 依次送 `session.open` 和 `agent.submit`。
+
+### 已确认可用的 method（无需 session）
+
+| method | 返回 |
+|---|---|
+| `ping` | `{"ready":true,"required_agent":"osbot.main","agent_system_ready":true}` |
+| `auth.status` | `{"logged_in":true,"user_id":"…"}` |
+| `auth.login` | 同上 |
+| `session.open` | `{"sessionId":"…","type":"ok"}` |
+| `asr.stop` / `asr.cancel` | 需要 `params.asrId` |
+| `asr.start` | 返回提示：用 binder 的 `startAsr()` 做流式识别 |
