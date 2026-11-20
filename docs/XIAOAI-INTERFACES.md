@@ -147,3 +147,19 @@ CB#1             => {"code":"PERMISSION_DENIED","message":"session 不属于当�
 | `session.open` | `{"sessionId":"…","type":"ok"}` |
 | `asr.stop` / `asr.cancel` | 需要 `params.asrId` |
 | `asr.start` | 返回提示：用 binder 的 `startAsr()` 做流式识别 |
+
+## 9. 上传流：连接亲和性被绕开的证据（2026-11-20）
+
+```
+upload.open  => u0
+CB#1         => {"type":"ok","id":"u0","sessionId":"3d08ab23-976d-4356-bb28-4b8f69b143c3"}
+lastSession  = 3d08ab23-…
+upload.chunk sent     ← sendUploadChunk(streamId, agent.submit 请求)
+upload.end   done
+```
+
+关键点：这次 **没有** 报 `PERMISSION_DENIED`。
+说明走上传流时，chunk 与 `session.open` 处于同一个连接上下文，session 被接受。
+
+还缺：chunk 的处理结果没有以回调事件返回（等 2.5s 无事件）。
+下一步要么延长等待/保持流不关闭，要么 chunk 的报文格式不是 CliRequest（可能是原始文本分片）。
