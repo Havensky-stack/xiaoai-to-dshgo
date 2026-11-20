@@ -59,3 +59,60 @@ IFileExchange, IPendingIntentJumpService, IExternalRecorderService …
 2. **被小爱的生态调用**：实现 `IAppToolProvider`，让小米自家入口（负一屏、系统设置、超级岛）把我们的工具当成小爱的工具来用
 
 即：不必二选一「替换 or 共存」，可以做到**壳是新的、能力面沿用系统的**。
+
+## 6. 实测：权限绕过可行（2026-11-20）
+
+LSPosed 模块 `io.github.dsh.permhook` 在 `system_server` 里 hook 权限校验，
+对 uid 属于 `io.github.dsh.voice` 的调用方，把 `com.aios.osbot.*` 权限判为 GRANTED。
+
+日志证据：
+
+```
+I/VectorLegacyBridge: DSHPERM: loaded in system_server
+I/VectorLegacyBridge: DSHPERM: granted com.aios.osbot.permission.EXTERNAL_AGENT uid=10055
+I/DSHVOICE: PROBE bindService -> true
+I/DSHVOICE: PROBE connected: ComponentInfo{com.miui.voiceassist/com.aios.osbot.external.CliCommandService}
+```
+
+即：**签名权限可以被绕过，小爱的服务可以绑定。**
+
+## 7. CLI 协议形状
+
+`ICliCommandService.executeCommand(String)` 收的不是命令，是 **JSON 请求**：
+
+```json
+{"id":"1","method":"<method>","params":{...}}
+```
+
+返回：
+
+```json
+{"id":"1","type":"ok|error","code":"...","message":"...","done":true}
+```
+
+解析器是 kotlinx.serialization，模型 `com.aios.osbot.cli.model.CliRequest`，
+缺字段时会把错误原文吐出来（这是白送的 schema 提示）。
+
+### 已定位的 handler 家族
+
+| 类 | 方法名线索 |
+|---|---|
+| `CliAsrHandler` | `startRecognize` / `stopRecognize` / `cancelRecognize` |
+| `CliAgentHandler` | `handleSubmit` / `handleConsent` |
+| `CliTtsHandler` | `handleOpen` |
+| `CliAuthHandler` | `handleLogin` / `handleStatus` |
+| `CliSessionHandler` | `handleOpen` |
+| `CliFrameworkHandler` | — |
+
+事务码（bind 后按序试出来的）：
+
+```
+1 = executeCommand(String json)
+2 = executeStreaming(String json, callback)
+3 = cancelSubscription(String id)
+4 = openUploadStream(...)
+5 = sendUploadChunk(...)
+7 = executeStreamingWithFd(...)
+```
+
+下一步：从 `CliDispatcher` 的 when 分支里取出 method 字符串全集。

@@ -17,5 +17,6 @@
             android:theme="@android:style/Theme.DeviceDefault.NoActionBar" />
         <activity android:name=".SettingsActivity" android:exported="true"
             android:label="模型配置" />
+        <activity android:name=".ProbeActivity" android:exported="true" />
     </application>
 </manifest>
