@@ -95,10 +95,11 @@ public class ProbeActivity extends Activity {
             if (lastSession != null && !lastSession.isEmpty()) {
                 tx5(binder, st, "{\"id\":\"u1\",\"method\":\"agent.submit\",\"params\":{\"sessionId\":\"" + lastSession + "\",\"text\":\"用一句话介绍你自己\"}}");
                 log("upload.chunk sent");
-                Thread.sleep(2500);
+                Thread.sleep(12000);
             }
             tx6(binder, st);
             log("upload.end done");
+            fdFlow(binder);
         } catch (Throwable t) {
             log("probe !! " + t.getClass().getSimpleName() + ": " + t.getMessage());
         }
@@ -134,6 +135,33 @@ public class ProbeActivity extends Activity {
             r.readException();
             return r.readString();
         } finally { d.recycle(); r.recycle(); }
+    }
+
+    private void fdFlow(IBinder b) throws Exception {
+        android.os.ParcelFileDescriptor[] pipe = android.os.ParcelFileDescriptor.createPipe();
+        Cb cb = new Cb();
+        String open = "{\"id\":\"f1\",\"method\":\"session.open\"}";
+        Parcel d = Parcel.obtain(); Parcel r = Parcel.obtain();
+        try {
+            d.writeInterfaceToken(DESC);
+            d.writeString(open);
+            d.writeParcelable(pipe[0], 0);
+            d.writeStrongBinder(cb);
+            b.transact(7, d, r, 0);
+            r.readException();
+            log("fd.open ok");
+        } finally { d.recycle(); r.recycle(); }
+        java.io.FileOutputStream out = new java.io.FileOutputStream(pipe[1].getFileDescriptor());
+        Thread.sleep(1500);
+        log("fd.session=" + lastSession);
+        if (lastSession != null && !lastSession.isEmpty()) {
+            String sub = "{\"id\":\"f2\",\"method\":\"agent.submit\",\"params\":{\"sessionId\":\"" + lastSession + "\",\"text\":\"用一句话介绍你自己\"}}\n";
+            out.write(sub.getBytes("UTF-8"));
+            out.flush();
+            log("fd.write submit");
+            Thread.sleep(5000);
+        }
+        out.close();
     }
 
     private String tx4(IBinder b, String json, Cb cb) throws Exception {
