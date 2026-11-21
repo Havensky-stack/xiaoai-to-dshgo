@@ -133,3 +133,46 @@
 | 2 | 回答形式 | 屏幕文字 + 可选 TTS 播报 |
 | 3 | 后台屏 | 先用社区 `dsh-go-second-screen`，跑通再考虑自研 |
 | 4 | 模块兼容范围 | 只保当前 HyperOS 版本，还是尽量向前兼容 |
+
+---
+
+## 八、root 带来的简化（v3.1 补充）
+
+有 root 就不该硬碰硬去 hook。原则：**能改状态的用 root，必须拦逻辑的才 hook。**
+
+### 8.1 可用 root 直接做的事
+
+| 能力 | 命令/方式 | 替代掉的 hook |
+|---|---|---|
+| 冻结小爱的指定组件 | `pm disable-user --user 0 com.miui.voiceassist/.XxxActivity` | 抑制应答的 hook |
+| 授权签名权限 | 改 `/data/system/packages.xml` 补 `<perms>` | system_server 权限 hook |
+| 开机自启服务 | KernelSU `service.d` 脚本 | 前台服务保活 |
+| 建虚拟屏 | root 直接 `app_process` 跑 scrcpy-server | **免 adb、免 tcpip** |
+| 注入触摸 | `input -d <displayId> tap x y`（Android 11+） | scrcpy 控制通道 |
+| 改系统属性 | `resetprop` | 各种开关 hook |
+| 强杀/重启进程 | `am force-stop` / `kill` | 状态清理 hook |
+| 读任意文件 | 直接读 `/data` | 提权相关 hook |
+
+### 8.2 仍然只能 hook 的两件事
+
+1. **识别结果的实时截获**——文本出现在内存里，没有落盘，只能 hook 或 hook 其回调
+2. **入口的运行时重定向**——长按键被 SystemUI 点名拉起小爱，必须在拉起时改道
+
+其余全部可以“改状态”解决，比 hook 稳定得多。
+
+### 8.3 用 root 重排 P0
+
+| 原计划 | root 版做法 |
+|---|---|
+| hook 抑制小爱应答 | **`pm disable-user` 停用小爱的对话/播报组件**，只留唤醒与 ASR 服务 |
+| 改 ASSISTANT 角色 | 保留小爱持角色，模块只改“会话开启后干什么” |
+| 后台屏依赖 adb | **root 直接建屏**，省掉 adb tcpip 与配对 |
+| 前台服务保活 | KernelSU `service.d` 开机拉起 |
+
+### 8.4 风险
+
+| 风险 | 说明 | 应对 |
+|---|---|---|
+| 停用组件导致其他入口崩溃 | 某些系统页会 bind 小爱组件 | 逐个停用、逐个验证；记录回滚命令 |
+| 改 `packages.xml` 写坏 | 可能无限重启 | 先备份；优先用 KernelSU 的 priv-app overlay 替代 |
+| root 权限面扩大 | 模块本身成为高价值目标 | 模块只做最小操作，不常驻特权 shell |
