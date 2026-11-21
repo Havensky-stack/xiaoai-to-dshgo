@@ -216,3 +216,26 @@
 - 探测全是只读命令，**不改变手机状态**，风险为零
 - 一轮就能把 13 个入口里的大部分从“未知”变成“已知”
 - 避免写完 hook 才发现“其实改个 settings 就行”，或者反过来
+
+### 9.5 首轮探测结果（2026-11-22）
+
+| 入口 | 实测 | 结论 |
+|---|---|---|
+| `KEYCODE_ASSIST`（keyevent 219） | `START io.github.dsh.voice/.AssistantActivity` | **走 ASSISTANT 角色，不硬编码小爱** ✅ |
+| `settings secure assistant` | `io.github.dsh.voice/.AssistantService` | 可被改写，root 一条命令 |
+| `role holders ASSISTANT` | `io.github.dsh.voice` | 可被 `cmd role` 改 |
+| 小爱唤醒服务 | 角色丢了仍在跑（`VA_UiController dispatchAction`） | 唤醒与角色解耦，可保留 |
+
+**推论（待验证）**：
+- 「助理入口」这层大概率**不需要 hook**，root 改角色即可
+- 但「长按电源键」可能是 HyperOS 单独实现的，需人工长按实测
+- 小爱丢了角色仍能唤醒 → 完美接替可以走「**角色给我们 + 唤醒留给她 + hook 结果出口**」
+
+### 9.6 修正后的手段选择
+
+| 入口 | 首选手段 | 依据 |
+|---|---|---|
+| ASSIST / 助理角色 | **root 改角色** | 已实测 |
+| 长按电源键 | 待测（可能 hook SystemUI） | 未验证 |
+| 唤醒词 | 保留小爱服务 + hook 结果 | 已见服务仍在跑 |
+| 输入法/耳机/锁屏/负一屏 | 待测 | 未验证 |
