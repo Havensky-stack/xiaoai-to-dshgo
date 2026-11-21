@@ -239,3 +239,38 @@
 | 长按电源键 | 待测（可能 hook SystemUI） | 未验证 |
 | 唤醒词 | 保留小爱服务 + hook 结果 | 已见服务仍在跑 |
 | 输入法/耳机/锁屏/负一屏 | 待测 | 未验证 |
+
+### 9.7 P0 阶段实测状态（2026-11-22 01:15）
+
+| 环节 | 状态 | 证据 |
+|---|---|---|
+| 小爱进程内 hook | ✅ | `DSHASAN: v3 hooked`（Vector 日志，非 logcat） |
+| 状态机过滤（我在听→思考中） | ✅ 已实现 | XiaoaiBridge v3 |
+| 转发到 dsh-go | ✅ 机制验证过 | `ACTION_SEND` → `share/ShareActivity` 落草稿 |
+| 助理角色归还小爱 | ✅ | `role = com.miui.voiceassist` |
+| 唤醒进程 | ⚠️ 起来了但**不占麦克风** | `:voice_trigger` 在跑，无 active record |
+| 唤醒引擎 | ⚠️ 未加载 | 四个进程 `/proc/pid/maps` 里都没有 wakeup/flexkws/paddy |
+| SoundTrigger | ❌ 无注册 | `dumpsys soundtrigger` 无 enrolled/active |
+
+### 9.8 入口配置发现（重大）
+
+```
+secure entity_config_key_voice_assistant =
+{"entityType":1,"startFromKey":"voice_assist_start_from_key",
+ "pkgName":"com.miui.voiceassist",
+ "clazzName":"com.xiaomi.voiceassistant.VoiceService",
+ "startFromValue":"double_click_and_long_click_fullscreen_gesture_line",
+ "triggerType":6}
+```
+
+- 双击/长按手势的落点**是 settings 可配的**，不是硬编码
+- 另有 `NavDoubleClick=VoiceAssistant`、`NavLongPress=VoiceAssistantVoiceInput`
+- 备份已存：`/sdcard/Download/DSH-Go/assist-backup.txt`
+
+**风险**：改成不存在的组件会让手势静默失效，且需 SystemUI 重启才生效 → 改之前必须先想好回滚。
+
+### 9.9 未解问题
+
+1. 小爱唤醒到底走哪条链路（进程在跑、库没映射、麦克风没占用、SoundTrigger 没注册）
+2. `wakeupInit` 传空字符串 + 长度的真实含义（frameSize 返回 0）
+3. 转发后是否要抑制小爱自身应答（需真实语音样本验证）
