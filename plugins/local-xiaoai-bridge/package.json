@@ -1,0 +1,33 @@
+{
+  "name": "local-xiaoai-bridge",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "lib/index.js",
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  },
+  "engines": {
+    "dsh": ">=0.2.1-rc.2 <0.3.0-0"
+  },
+  "dshGo": {
+    "v": 1,
+    "title": { "zh": "小爱桥", "en": "Xiaoai Bridge" },
+    "icon": "robot",
+    "contributes": {
+      "composer.strip": [
+        { "id": "state", "icon": "robot", "text": "小爱桥：待机" }
+      ],
+      "panels": [
+        {
+          "id": "status",
+          "title": "小爱桥",
+          "icon": "robot",
+          "placement": ["session.tab", "features"]
+        }
+      ]
+    }
+  }
+}
