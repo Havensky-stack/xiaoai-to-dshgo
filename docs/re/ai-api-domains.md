@@ -1,7 +1,7 @@
-# 小爱云端 API 域（62 个）
+# 小爱云端 API 域（61 个）
 
 > 来源：`com.xiaomi.ai.api.AIApiConstants` 内部类（jadx 反编译 `classes5.dex`）
-> 每个域是一组 String 常量 = 指令名/事件名
+> 每个域是一组 String 常量 = 指令名/事件名；61 个域共 571 个内部类
 
 ```
  1. Agent
