@@ -1,61 +1,75 @@
-# xiaoai-re
+# xiaoai-takeover
 
-小米「小爱同学」（`com.miui.voiceassist` 8.2.65）的完整逆向工程记录，
-目标是**复刻其中一部分功能、改造另一部分**。
+接替小米「小爱同学」的 LSPosed 模块 + 配套的 dsh-go 插件。
 
-> 早期版本的目标是「用 dsh-go 顶替小爱」——那部分的计划与代码仍保留在
-> `docs/PLAN.md` 与 `app/`、`module/`、`plugins/` 中，作为历史与可复用资产。
+## 交付物
+
+| # | 交付物 | 形态 | 作用 |
+|---|---|---|---|
+| 1 | **LSPosed 模块** `io.github.dsh.xiaoai` | APK，注入小爱进程 | 接替小爱的大部分功能 |
+| 2 | **dsh-go 插件** `local-xiaoai-bridge` | dsh-go 原生插件 | 承接模块搞不定的事、展示状态 |
+
+## 分工
+
+### 模块接替的部分（替代小爱）
+
+| 能力 | 实现方式 |
+|---|---|
+| 助理入口 | 接管 `ASSISTANT` 角色与手势/长按 |
+| 唤醒词 | 复用小米唤醒引擎，事件转给模块 |
+| 语音识别 | hook `OperationManager#onAsrResult` → `getQuery()` |
+| 语音播报 | hook `TextToSpeech#speak`，改由我们控制 |
+| 压制小爱 | 拦她的应答、弹窗、抢焦点 |
+| 简单技能 | 本地用系统 API：时间、闹钟、音量、开关、打开 App、拨号等 |
+
+### 转交 dsh-go 的部分（小爱做不到的）
+
+| 场景 | 为什么转 |
+|---|---|
+| 推理 / 写代码 / 查资料 | 需要大模型与工具 |
+| 操作手机（点按、跨 App 流程） | 需要虚拟屏与自动化 |
+| 联网（浏览器、搜索、抓取） | 需要真实网络能力 |
+| 长任务 / 需要记忆 | 需要会话与计划 |
+
+### 通道
+
+```
+模块（小爱进程）── 本地文件 / 广播 ──► dsh-go 插件（dsh 引擎）
+                                        │
+                                        └─► 结果回传 → 模块播报/显示
+```
+
+先文件后 HTTP：稳定后再换 `127.0.0.1` 的 HTTP 调用。
 
 ## 现状
 
 | 项 | 状态 |
 |---|---|
-| 结构清单（组件/权限/进程/库/资源） | ✅ 完成 |
-| 云端接口目录（61 个域） | ✅ 完成 |
-| 全量类索引（152067 个类） | ✅ 完成 |
-| 协议层源码（`com.xiaomi.ai.api`） | ✅ 反编译完成，2297 个文件 |
-| 业务层源码（`com.xiaomi.voiceassistant`） | ✅ 4 个 dex 反编译完成，约 4800 个文件 |
-| 语音链路（唤醒→ASR） | ✅ 定位到 `OperationManager.onAsrResult` → `getQuery()` |
-| NLU / 技能路由 | ⏳ 待做 |
-| 云端调用（鉴权） | ❌ 需要设备证书，不可复刻 |
+| 识别结果 hook 点 | ✅ 已定位（`onAsrResult` → `getQuery()`） |
+| 模块 v11 | ✅ 已编译，含 ASR hook + TTS 静音 + 状态文件 |
+| dsh-go 插件 | ✅ 状态胶囊 + 面板已装 |
+| 静音开关 ↔ 模块 | ✅ 文件握手已通 |
+| 入口接管 | ⏳ 待做 |
+| 简单技能本地实现 | ⏳ 待做 |
+| 请求转交 dsh-go | ⏳ 待做 |
 
 ## 仓库结构
 
 ```
+module/                    LSPosed 模块源码（v11）
+plugins/local-xiaoai-bridge/   dsh-go 原生插件
 docs/
-  re/                     逆向产物
-    L1-L5-inventory.md    组件/权限/库/资源清单
-    cloud-api.md          云端 61 个 API 域与协议模型
-    ai-api-domains.md     61 个域的完整列表
-    class-index.csv.gz    152067 个类的索引（743 KB）
-    README.md             产物用法
-  PLAN.md                 早期「顶替小爱」计划书（历史）
-  ARCHITECTURE.md         早期架构说明（历史）
-  XIAOAI-INTERFACES.md    小爱对外接口清单（仍有参考价值）
-  RE-XIAOAI.md            逆向工作的六层拆解与里程碑
-app/                      助理壳（历史，可复用）
-module/                   LSPosed 模块源码（v11，hook 识别结果）
-plugins/                  dsh-go 原生插件（历史）
+  XIAOAI-INTERFACES.md     小爱对外接口清单
+  re/                      逆向产物（支撑材料，不是交付物）
+    L1-L5-inventory.md     组件/权限/库/资源
+    cloud-api.md           云端协议模型
+    ai-api-domains.md      61 个 API 域
+    class-index.csv.gz     152067 类索引
+  PLAN.md                  历史计划（顶替阶段的方案，可复用）
 ```
-
-## 关键结论
-
-1. **小爱的智能在云端**：APK 只是客户端，571 个内部类 / 61 个域描述的是
-   directive/event 协议，真正的理解与内容服务不在包里。
-2. **云端不可复刻**：调用链是 `libzrpc2` + 设备证书 + 小米账号，
-   逆向客户端拿不到授权。
-3. **可复刻的是形态**：唤醒、入口、交互、设备控制、技能编排。
-4. **语音链路的稳定出口**：`com.xiaomi.voiceassistant.instruction.base.OperationManager#onAsrResult`
-   → 参数 `t51.b` 的 `getQuery()`——这是识别文本最可靠的获取点。
-
-## 下一步
-
-1. NLU / 技能路由：读 `com.xiaomi.ai.function.*`，建立「意图 → 技能」表
-2. 挑 3–5 个可复刻的技能，写出等价实现
-3. 需要云端能力的地方，换源（自建模型或第三方 API）
 
 ## 边界
 
-- 仅分析本机已安装的应用，用于互操作与自用改造
-- 不转发、不分发小米的模型、资源、商标与私有数据
-- 复刻版使用自己的包名与标识，不冒充官方
+- 只分析本机已安装的应用，用于互操作与自用
+- 不转发、不分发小米的模型、资源与商标
+- 模块只做最小必要操作，不常驻特权 shell
